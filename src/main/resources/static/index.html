@@ -2,16 +2,20 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"> <!-- Meta tag essencial para o Mobile -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PIT - Cupcakekaria</title>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #fce4ec; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        
+        /* CORREÇÃO 1 (João Carlos): Container com largura máxima para telas Ultrawide */
+        .container { width: 100%; max-width: 1200px; display: flex; flex-direction: column; align-items: center; }
+        
         h1 { color: #d81b60; font-size: 2.5em; text-align: center; margin-bottom: 10px; }
         
-        .grid { display: flex; gap: 25px; justify-content: center; flex-wrap: wrap; margin-top: 10px; max-width: 1000px; }
+        .grid { display: flex; gap: 25px; justify-content: center; flex-wrap: wrap; margin-top: 10px; width: 100%; }
         .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 6px 12px rgba(0,0,0,0.1); width: 260px; text-align: center; transition: transform 0.2s; }
         .card:hover { transform: translateY(-5px); }
-        .card img { width: 100%; height: 220px; object-fit: cover; border-radius: 8px; } /* CA#3: object-fit para evitar distorção */
+        .card img { width: 100%; height: 220px; object-fit: cover; border-radius: 8px; }
         h3 { color: #333; margin: 15px 0 5px 0; }
         .descricao { color: #666; font-size: 0.9em; min-height: 40px; }
         .preco { color: #2e7d32; font-weight: bold; font-size: 1.4em; margin: 15px 0; }
@@ -23,115 +27,174 @@
         .resumo h2 { margin: 0 0 15px 0; color: #333; font-size: 1.8em; text-align: center;}
         
         #lista-itens { list-style: none; padding: 0; margin: 0 0 20px 0; color: #555; font-size: 1em; }
-        #lista-itens li { display: flex; justify-content: space-between; border-bottom: 1px dashed #ccc; padding: 5px 0; }
+        #lista-itens li { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed #ccc; padding: 8px 0; }
         
-        .resumo .total-destaque { font-size: 1.4em; font-weight: bold; text-align: center; margin-bottom: 15px; }
+        .resumo .total-destaque { font-size: 1.4em; font-weight: bold; text-align: center; margin-bottom: 15px; margin-top: 10px; }
         .resumo span { color: #2e7d32; }
         .btn-pagar { background-color: #2e7d32; font-size: 1.2em; }
         .btn-pagar:hover { background-color: #1b5e20; }
+        .btn-remover { background-color: #ffebee; color: #c62828; width: auto; padding: 4px 8px; font-size: 0.8em; margin-left: 10px; border-radius: 4px; }
+        .btn-remover:hover { background-color: #ffcdd2; }
 
-        /* APLICAÇÃO DO RNF#1 (USABILIDADE): Responsividade para Mobile */
+        /* CORREÇÃO 5 (Lucas Almeida): Estilo da notificação Toast */
+        #toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 1000; display: flex; flex-direction: column; gap: 10px; }
+        .toast { background-color: #4caf50; color: white; padding: 12px 20px; border-radius: 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.2); transition: opacity 0.5s ease; font-weight: bold; }
+
         @media (max-width: 768px) {
             body { padding: 10px; }
             .grid { flex-direction: column; align-items: center; }
             .card { width: 90%; max-width: 320px; }
             .resumo { width: 90%; max-width: 320px; }
+            /* CORREÇÃO 2 (Mariana Silva): Botão de remover maior para touch no celular */
+            .btn-remover { padding: 12px 18px; font-size: 1.1em; margin-left: 15px; }
         }
     </style>
 </head>
 <body>
     
-    <h1>🧁 Cupcakekaria 🧁</h1>
-    
-    <div class="grid" id="vitrine"></div>
+    <div class="container">
+        <h1>🧁 Cupcakekaria 🧁</h1>
+        
+        <div class="grid" id="vitrine"></div>
 
-    <div class="resumo">
-        <h2>Seu Pedido</h2>
-        <ul id="lista-itens">
-            <li style="color: #999; justify-content: center; border: none;">Nenhum item selecionado</li>
-        </ul>
-        <div class="total-destaque">Total: R$ <span id="valor-total">0,00</span></div>
-        <button class="btn-pagar" onclick="pagar()">Pagar Compra</button>
+        <div class="resumo">
+            <h2>Seu Pedido</h2>
+            <ul id="lista-itens">
+                <li style="color: #999; justify-content: center; border: none;">Nenhum item selecionado</li>
+            </ul>
+            <div class="total-destaque">Total: R$ <span id="valor-total">0,00</span></div>
+            <button class="btn-pagar" onclick="pagar()">Pagar Compra</button>
+        </div>
     </div>
+
+    <!-- Container para as notificações flutuantes -->
+    <div id="toast-container"></div>
 
     <script>
         let carrinho = {}; 
         let totalCompra = 0.0;
 
-        fetch('/api/cupcakes')
-            .then(response => response.json())
-            .then(cupcakes => {
-                const vitrine = document.getElementById('vitrine');
-                
-                // RN#1: O Java já manda os ativos, o JS apenas desenha na tela
-                cupcakes.forEach(cupcake => {
-                    const card = document.createElement('div');
-                    card.className = 'card';
-                    
-                    const precoFormatado = cupcake.preco.toFixed(2).replace('.', ',');
-                    
-                    // RN#2: Concatenação do prefixo "Cupcake de"
-                    const nomeExibicao = "Cupcake de " + cupcake.nome;
-                    
-                    card.innerHTML = `
-                        <img src="${cupcake.fotoUrl}" alt="${nomeExibicao}">
-                        <h3>${nomeExibicao}</h3>
-                        <p class="descricao">${cupcake.descricao}</p>
-                        <p class="preco">R$ ${precoFormatado}</p>
-                        <button onclick="adicionarAoTotal('${nomeExibicao}', ${cupcake.preco})">Adicionar</button>
+        // CORREÇÃO 4 (Ana Clara): Função encapsulada para permitir botão de "Tentar Novamente"
+        function carregarProdutos() {
+            const vitrine = document.getElementById('vitrine');
+            vitrine.innerHTML = '<p style="color: #666; font-size: 1.2em;">Carregando produtos...</p>';
+
+            fetch('/api/cupcakes')
+                .then(response => {
+                    if(!response.ok) throw new Error("Erro na rede");
+                    return response.json();
+                })
+                .then(cupcakes => {
+                    vitrine.innerHTML = ''; // Limpa a mensagem de carregamento
+                    cupcakes.forEach(cupcake => {
+                        const card = document.createElement('div');
+                        card.className = 'card';
+                        const precoFormatado = cupcake.preco.toFixed(2).replace('.', ',');
+                        const nomeExibicao = "Cupcake de " + cupcake.nome;
+                        
+                        card.innerHTML = `
+                            <img src="${cupcake.fotoUrl}" alt="${nomeExibicao}">
+                            <h3>${nomeExibicao}</h3>
+                            <p class="descricao">${cupcake.descricao}</p>
+                            <p class="preco">R$ ${precoFormatado}</p>
+                            <button onclick="adicionarAoTotal('${nomeExibicao}', ${cupcake.preco})">Adicionar</button>
+                        `;
+                        vitrine.appendChild(card);
+                    });
+                })
+                .catch(error => {
+                    // Botão de Tentar Novamente em caso de falha/offline
+                    vitrine.innerHTML = `
+                        <div style="text-align: center; width: 100%;">
+                            <p style="color: #c62828; font-weight: bold; margin-bottom: 15px;">Erro ao carregar os produtos. Verifique sua conexão com o banco de dados.</p>
+                            <button onclick="carregarProdutos()" style="background-color: #666; width: auto;">Tentar Novamente</button>
+                        </div>
                     `;
-                    
-                    vitrine.appendChild(card);
                 });
-            })
-            .catch(error => {
-                document.getElementById('vitrine').innerHTML = '<p>Erro ao carregar os produtos.</p>';
-            });
+        }
+
+        // Chama a função ao abrir a página
+        carregarProdutos();
+
+        // CORREÇÃO 5 (Lucas Almeida): Função que cria a notificação visual na tela
+        function mostrarToast(mensagem) {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.innerText = mensagem;
+            container.appendChild(toast);
+            
+            // Faz sumir depois de 2.5 segundos
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 500);
+            }, 2500);
+        }
 
         function adicionarAoTotal(nome, preco) {
-            // CA#2 e RN#1 (US-02): Incrementa +1 se já existir
             if(carrinho[nome]) {
                 carrinho[nome].quantidade += 1;
             } else {
                 carrinho[nome] = { quantidade: 1, preco: preco };
             }
-            
-            // APLICAÇÃO DO RNF#1 (SEGURANÇA): Cálculo decimal estrito forçando arredondamento de 2 casas
             totalCompra = Math.round((totalCompra + preco) * 100) / 100;
-            
             atualizarTelaResumo();
+            
+            // Dispara a notificação visual
+            mostrarToast("Item adicionado ao carrinho!");
+        }
+
+        function removerDoTotal(nome, preco) {
+            if(carrinho[nome]) {
+                carrinho[nome].quantidade -= 1;
+                totalCompra = Math.round((totalCompra - preco) * 100) / 100;
+                if(totalCompra < 0) totalCompra = 0.0; 
+                if(carrinho[nome].quantidade === 0) {
+                    delete carrinho[nome];
+                }
+                atualizarTelaResumo();
+            }
         }
 
         function atualizarTelaResumo() {
             const listaHTML = document.getElementById('lista-itens');
             listaHTML.innerHTML = ''; 
             
+            if(Object.keys(carrinho).length === 0) {
+                listaHTML.innerHTML = '<li style="color: #999; justify-content: center; border: none;">Nenhum item selecionado</li>';
+                document.getElementById('valor-total').innerText = "0,00";
+                return;
+            }
+
             for (let nome in carrinho) {
                 let item = carrinho[nome];
-                // CA#3 (US-02): Formatação de moeda exata
                 let subtotalItem = Math.round((item.preco * item.quantidade) * 100) / 100;
                 let subtotalFormatado = subtotalItem.toFixed(2).replace('.', ',');
                 
                 listaHTML.innerHTML += `
                     <li>
                         <span><b>${item.quantidade}x</b> ${nome}</span>
-                        <span>R$ ${subtotalFormatado}</span>
+                        <span style="display: flex; align-items: center;">
+                            R$ ${subtotalFormatado}
+                            <button class="btn-remover" onclick="removerDoTotal('${nome}', ${item.preco})">X</button>
+                        </span>
                     </li>
                 `;
             }
-            
-            // CA#1 (US-03): Atualiza instantaneamente
             document.getElementById('valor-total').innerText = totalCompra.toFixed(2).replace('.', ',');
         }
 
         function pagar() {
-            // RN#1 (US-03): Validação impedindo pagamento de carrinho vazio
             if(totalCompra === 0) {
                 alert("Seu carrinho está vazio! Adicione cupcakes antes de pagar.");
                 return;
             } 
             
-            // CA#2 (US-03): Extrato de finalização de compra
+            // CORREÇÃO 3 (Pedro Henrique): Modal de revisão de pedido
+            if(!confirm("Deseja confirmar o pedido e finalizar a compra?")) {
+                return; // Aborta se o usuário clicar em "Cancelar"
+            }
+            
             let relatorio = "🧁 COMPRA FINALIZADA!\n\nVocê comprou:\n";
             for (let nome in carrinho) {
                 relatorio += `- ${carrinho[nome].quantidade}x ${nome}\n`;
@@ -140,7 +203,6 @@
             
             alert(relatorio);
             
-            // CA#3 (US-03): Limpeza automática do carrinho após pagamento
             carrinho = {};
             totalCompra = 0.0;
             
